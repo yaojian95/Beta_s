@@ -13,15 +13,24 @@ class logLike(object):
         Input:        
         -----------------------------------------
         nside;        
-        fres: np.array; contains the frequencies of the input maps
+        fres: np.array; contains the all the frequencies of the input maps
         fre_list: list that contain the target frequencies (ordered number) 
         P_maps: input maps (signal + noise), with the shape of (fres, 12*nside**2)
         sigma_maps: noise std, corresponding to the noise generation in the P_maps
         index: a number, pixel index of the pixel to be analyzed.
+        
+        Note
+        ----
+        Set the geometric mean of the frequencies as the reference frequency. Then if 
+        power law is statisfied, A0 = P_nu0.
+        
         '''
         
-        self.nside = nside; self.fre_list = fre_list
-        self.fres = fres; self.nu0 = gmean(fres)
+        self.nside = nside; 
+        
+        self.fre_list = fre_list; self.fres = fres; 
+        
+        self.nu0 = gmean(fres[fre_list]) 
         self.P = P_maps; self.sigma = sigma_maps
         self.index = index
     
