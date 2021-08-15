@@ -53,10 +53,15 @@ total_P = np.load('/global/cscratch1/sd/jianyao/CBASS/Observations/homo_noise/to
 
 total_sigma = np.load('/global/cscratch1/sd/jianyao/CBASS/Noise/homo_noise/5_fre_sigma_P_%s_uK_RJ.npy'%Nside)
 masked_index = np.load('/global/cscratch1/sd/jianyao/CBASS/masked_index.npy')
+
+### pixels with high s/n ratios. ###
+# high_snr = np.load('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/High_SNR_pixels_300.npy')
+low_snr = np.load('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Low_SNR_pixels_1455.npy')
+
 npara = 2; 
 
 def prior(cube):
-    A0 = cube[0]*1000 # 0-100
+    A0 = cube[0]*500 # 0-100
     beta = cube[1]*2 - 4
     
     return [A0, beta]
@@ -82,26 +87,20 @@ def log_run(logL, index):
 
 N = int(args.npix) #int(len(masked_index)/size) ## size = 45
 
-subset_pixels = masked_index[np.arange((rank)*N, (rank+1)*N)]    
+subset_pixels = low_snr[np.arange((rank)*N, (rank+1)*N)]    #masked_index[np.arange((rank)*N, (rank+1)*N)]    
 
 paras = np.zeros((N, 2))
 j = 0
-
-start = time.time()
+start_all = time.time()
 for n in subset_pixels:
-    
-#     try: 
+    start = time.time()
     paras[j] = log_run(logL, n)
     j += 1
                      
-#     except TimeoutError:
+#     if n%10 == 0:
 #         end = time.time()
 #         cost = (end - start)/60
-#         print('pixel %s takes too long - %s mins.'%(n, cost))
-#         j += 1
-#         continue 
-                     
-# print(As_beta)
+#         print('Time cost is %s mins for pixel %s at rank %s'%(cost, n, rank))
 
 sendbuf = paras
 
@@ -121,8 +120,8 @@ if rank == 0:
     if args.frelist == 'both':
         np.save('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Dyne_As_betas_masked_both_32_with_SPASS_CBASS.npy', recvbuf)
     
-    end = time.time()
-    print('Time cost is %s mins.'%((end-start)/60))
+    end_all = time.time()
+    print('Time cost is %s mins.'%((end_all-start_all)/60))
 
 # print(As)
 # print(betas)
