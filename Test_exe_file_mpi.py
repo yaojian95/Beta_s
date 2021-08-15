@@ -30,12 +30,15 @@ a = np.array((0,1,2,3,4))
 
 if args.frelist == 'spass_only':
     fres_list = [0,2,3,4]
+    P_nu0 = np.load('/global/cscratch1/sd/jianyao/CBASS/Foreground/P_14.92_s0_32_uK_RJ.npy')
 
 if args.frelist == 'cbass_only':
     fres_list = [1,2,3,4]
+    P_nu0 = np.load('/global/cscratch1/sd/jianyao/CBASS/Foreground/P_18.12_s0_32_uK_RJ.npy')
     
 if args.frelist == 'both':
     fres_list = [0,1,2,3,4]
+    P_nu0 = np.load('/global/cscratch1/sd/jianyao/CBASS/Foreground/P_11.99_s0_32_uK_RJ.npy')
     
 if rank == 0:
     start = time.time()
@@ -55,8 +58,9 @@ total_sigma = np.load('/global/cscratch1/sd/jianyao/CBASS/Noise/homo_noise/5_fre
 masked_index = np.load('/global/cscratch1/sd/jianyao/CBASS/masked_index.npy')
 
 ### pixels with high s/n ratios. ###
-# high_snr = np.load('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/High_SNR_pixels_300.npy')
-low_snr = np.load('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Low_SNR_pixels_1455.npy')
+high_snr = np.load('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/High_SNR_pixels_300.npy')
+
+# low_snr = np.load('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Low_SNR_pixels_1470.npy')
 
 npara = 2; 
 
@@ -66,30 +70,45 @@ def prior(cube):
     
     return [A0, beta]
 
+def prior_flex(cube, A0):
+    
+#     As = cube[0]*200 + (A0 - 100)
+    As = cube[0]*200 + (A0 - 50) ### for cbass only !!!
+    beta = cube[1]*2 - 4
+    
+    return [As, beta]
+
 logL = Loglikeli.logLike(Nside, fres,fres_list, total_P, total_sigma, 0)
  
-# @timeout_decorator.timeout(90) 
 def log_run(logL, index):
     
     logL.index = index
-    sampler = dynesty.NestedSampler(logL.loglike, prior, npara, nlive=200, bootstrap = 0)
+    
+    if index in high_snr:
+        sampler = dynesty.NestedSampler(logL.loglike, prior_flex, npara, nlive=200, ptform_args = (P_nu0[logL.index],), bootstrap = 0)
+    else:
+        sampler = dynesty.NestedSampler(logL.loglike, prior, npara, nlive=200, bootstrap = 0)
+        
     sampler.run_nested(dlogz = 0.1, print_progress=False) #
     results = sampler.results
     
     samples, weights = results.samples, np.exp(results.logwt - results.logz[-1])
+    mean, cov = dyfunc.mean_and_cov(samples, weights)
     
-    As = quantile(samples[:,0], [0.5], weights)[0];
-    beta_s = quantile(samples[:,1], [0.5], weights)[0]
+#     As = quantile(samples[:,0], [0.5], weights)[0];
+#     beta_s = quantile(samples[:,1], [0.5], weights)[0]
+    As, beta_s = mean[0], mean[1]
+    sig_A, sig_B = np.sqrt(cov[0,0]), np.sqrt(cov[1,1])
     
-    return np.array((As, beta_s))
+    return np.array((As, sig_A, beta_s, sig_B))
     
 ## 45 ranks, 1755 pixels for the masked region, each rank has 39 pixels
 
 N = int(args.npix) #int(len(masked_index)/size) ## size = 45
 
-subset_pixels = low_snr[np.arange((rank)*N, (rank+1)*N)]    #masked_index[np.arange((rank)*N, (rank+1)*N)]    
+subset_pixels = masked_index[np.arange((rank)*N, (rank+1)*N)]    
 
-paras = np.zeros((N, 2))
+paras = np.zeros((N, 4)) ## mean value and uncertainty for As and beta_s
 j = 0
 start_all = time.time()
 for n in subset_pixels:
@@ -107,7 +126,7 @@ sendbuf = paras
 # print(sendbuf.shape)
 recvbuf = None
 if rank == 0:
-    recvbuf = np.ones(size*2*N, dtype='d')
+    recvbuf = np.ones(size*4*N, dtype='d')
 #     print(recvbuf.shape)
 
 comm.Gather(sendbuf, recvbuf, root=0)
@@ -116,7 +135,7 @@ if rank == 0:
     if args.frelist == 'spass_only':
         np.save('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Dyne_As_betas_masked_both_32_with_SPASS_only.npy', recvbuf)
     if args.frelist == 'cbass_only':
-        np.save('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Dyne_As_betas_masked_both_32_with_CBASS_only_2.npy', recvbuf)
+        np.save('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Dyne_As_betas_masked_both_32_with_CBASS_only.npy', recvbuf)
     if args.frelist == 'both':
         np.save('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Dyne_As_betas_masked_both_32_with_SPASS_CBASS.npy', recvbuf)
     
