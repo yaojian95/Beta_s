@@ -1,8 +1,6 @@
 from scipy.stats import rice
 from scipy.stats.mstats import gmean
 
-import timeout_decorator 
-
 import time
 import numpy as np
 
@@ -19,25 +17,25 @@ rank = comm.Get_rank()
 import Loglikeli
 
 import argparse
-import numpy as np
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--frelist', type=str, required=True)
 parser.add_argument('--npix', type=str, required=True, help='the number of pixels for each process to analysis')
+parser.add_argument('--seed', type=str, required=True, help = 'realization of the noise')
 
 args = parser.parse_args()
 a = np.array((0,1,2,3,4))
 
 if args.frelist == 'spass_only':
-    fres_list = [0,2,3,4]
+    fres_list = [0,2,3,4]; const = 100
     P_nu0 = np.load('/global/cscratch1/sd/jianyao/CBASS/Foreground/P_14.92_s0_32_uK_RJ.npy')
 
 if args.frelist == 'cbass_only':
-    fres_list = [1,2,3,4]
+    fres_list = [1,2,3,4]; const = 50
     P_nu0 = np.load('/global/cscratch1/sd/jianyao/CBASS/Foreground/P_18.12_s0_32_uK_RJ.npy')
     
 if args.frelist == 'both':
-    fres_list = [0,1,2,3,4]
+    fres_list = [0,1,2,3,4]; const = 100
     P_nu0 = np.load('/global/cscratch1/sd/jianyao/CBASS/Foreground/P_11.99_s0_32_uK_RJ.npy')
     
 if rank == 0:
@@ -47,12 +45,9 @@ if rank == 0:
 
 fres = np.array([2.3, 5, 23, 28, 33]);Nside = 32; 
 
-npix = 12*Nside**2
-As = np.ones(npix); betas = np.ones(npix)
-
 ## import data
 
-total_P = np.load('/global/cscratch1/sd/jianyao/CBASS/Observations/homo_noise/totalP_s0_%s_uK_RJ_000.npy'%Nside)
+total_P = np.load('/global/cscratch1/sd/jianyao/CBASS/Observations/homo_noise/totalP_s0_%s_uK_RJ_%03d.npy'%(Nside, int(args.seed)))
 
 total_sigma = np.load('/global/cscratch1/sd/jianyao/CBASS/Noise/homo_noise/5_fre_sigma_P_%s_uK_RJ.npy'%Nside)
 masked_index = np.load('/global/cscratch1/sd/jianyao/CBASS/masked_index.npy')
@@ -72,8 +67,7 @@ def prior(cube):
 
 def prior_flex(cube, A0):
     
-#     As = cube[0]*200 + (A0 - 100)
-    As = cube[0]*200 + (A0 - 50) ### for cbass only !!!
+    As = cube[0]*200 + (A0 - const) 
     beta = cube[1]*2 - 4
     
     return [As, beta]
@@ -132,18 +126,14 @@ if rank == 0:
 comm.Gather(sendbuf, recvbuf, root=0)
 
 if rank == 0:
+    print(total_P[0,0])
     if args.frelist == 'spass_only':
-        np.save('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Dyne_As_betas_masked_both_32_with_SPASS_only.npy', recvbuf)
+        np.save('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Dyne_As_betas_masked_both_32_with_SPASS_only_%03d.npy'%(int(args.seed)), recvbuf)
     if args.frelist == 'cbass_only':
-        np.save('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Dyne_As_betas_masked_both_32_with_CBASS_only.npy', recvbuf)
+        np.save('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Dyne_As_betas_masked_both_32_with_CBASS_only_%03d.npy'%(int(args.seed)), recvbuf)
     if args.frelist == 'both':
-        np.save('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Dyne_As_betas_masked_both_32_with_SPASS_CBASS.npy', recvbuf)
+        np.save('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Dyne_As_betas_masked_both_32_with_SPASS_CBASS_%03d.npy'%(int(args.seed)), recvbuf)
     
     end_all = time.time()
     print('Time cost is %s mins.'%((end_all-start_all)/60))
-
-# print(As)
-# print(betas)
-# np.save('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/As.npy', As)
-# np.save('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Beta.npy', betas)
 
