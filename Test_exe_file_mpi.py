@@ -27,8 +27,8 @@ args = parser.parse_args()
 a = np.array((0,1,2,3,4))
 
 if args.frelist == 'spass_only':
-    fres_list = [0,2,3,4]; const = 100
-    P_nu0 = np.load('/global/cscratch1/sd/jianyao/CBASS/Foreground/P_14.92_s0_32_uK_RJ.npy')
+    fres_list = [0,2,3,4]; const = 60
+    P_nu0 = np.load('/global/cscratch1/sd/jianyao/CBASS/Foreground/P_beamed_14.92_s0_128_uK_RJ.npy')
 
 if args.frelist == 'cbass_only':
     fres_list = [1,2,3,4]; const = 50
@@ -43,32 +43,39 @@ if rank == 0:
 
 ## configuration 
 
-fres = np.array([2.3, 5, 23, 28, 33]);Nside = 32; 
+fres = np.array([2.3, 5, 23, 28, 33]);Nside = 128; 
 
 ## import data
 
-total_P = np.load('/global/cscratch1/sd/jianyao/CBASS/Observations/homo_noise/totalP_s0_%s_uK_RJ_%03d.npy'%(Nside, int(args.seed)))
+total_P = np.load('/global/cscratch1/sd/jianyao/CBASS/Observations/homo_noise/nside_128/totalP_s0_%s_uK_RJ_%03d.npy'%(Nside, 0))
 
-total_sigma = np.load('/global/cscratch1/sd/jianyao/CBASS/Noise/homo_noise/5_fre_sigma_P_%s_uK_RJ.npy'%Nside)
-masked_index = np.load('/global/cscratch1/sd/jianyao/CBASS/masked_index.npy')
+total_sigma = np.load('/global/cscratch1/sd/jianyao/CBASS/Noise/homo_noise/nside_128/5_fre_sigma_P_%s_uK_RJ_smoothed.npy'%Nside)
+masked_index = np.load('/global/cscratch1/sd/jianyao/CBASS/SPASS_masked_index.npy')
 
 ### pixels with high s/n ratios. ###
-high_snr = np.load('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/High_SNR_pixels_300.npy')
-
-# low_snr = np.load('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Low_SNR_pixels_1470.npy')
+high_snr = np.load('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/nside_128/High_SNR_pixels_3000.npy')
+mid_snr = np.load('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/nside_128/Middle_SNR_pixels_3000_70000.npy')
+low_snr = np.load('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/nside_128/Low_SNR_pixels_70000_end.npy')
 
 npara = 2; 
 
-def prior(cube):
-    A0 = cube[0]*500 # 0-100
+def prior(cube, a):
+    A0 = cube[0]*a 
     beta = cube[1]*2 - 4
+    
+    return [A0, beta]
+
+def prior_mid(cube, a):
+    A0 = cube[0]*a 
+    beta = cube[1]*0.2 - 3.1
     
     return [A0, beta]
 
 def prior_flex(cube, A0):
     
-    As = cube[0]*200 + (A0 - const) 
-    beta = cube[1]*2 - 4
+    As = cube[0]*120 + (A0 - const) # -60, +60
+#     beta = cube[1]*2 - 4
+    beta = cube[1]*0.2 - 3.1
     
     return [As, beta]
 
@@ -79,9 +86,13 @@ def log_run(logL, index):
     logL.index = index
     
     if index in high_snr:
-        sampler = dynesty.NestedSampler(logL.loglike, prior_flex, npara, nlive=200, ptform_args = (P_nu0[logL.index],), bootstrap = 0)
+        sampler = dynesty.NestedSampler(logL.loglike, prior_flex, npara, nlive=400, ptform_args = (P_nu0[logL.index],), bootstrap = 0)
+        
+    elif index in mid_snr:
+        sampler = dynesty.NestedSampler(logL.loglike, prior_mid, npara, nlive=400, ptform_args = (500,),  bootstrap = 0)
+    
     else:
-        sampler = dynesty.NestedSampler(logL.loglike, prior, npara, nlive=200, bootstrap = 0)
+        sampler = dynesty.NestedSampler(logL.loglike, prior, npara, nlive=400, ptform_args = (500,),  bootstrap = 0)
         
     sampler.run_nested(dlogz = 0.1, print_progress=False) #
     results = sampler.results
@@ -95,13 +106,12 @@ def log_run(logL, index):
     sig_A, sig_B = np.sqrt(cov[0,0]), np.sqrt(cov[1,1])
     
     return np.array((As, sig_A, beta_s, sig_B))
+
+nid = int(args.seed) ## node id used; 0-62
+N = int(args.npix) # 25 pixel for each rank; 61 ranks each node; 63 nodes in total.
+
+subset_pixels = masked_index[nid*1525:(nid+1)*1525][np.arange((rank)*N, (rank+1)*N)]    
     
-## 45 ranks, 1755 pixels for the masked region, each rank has 39 pixels
-
-N = int(args.npix) #int(len(masked_index)/size) ## size = 45
-
-subset_pixels = masked_index[np.arange((rank)*N, (rank+1)*N)]    
-
 paras = np.zeros((N, 4)) ## mean value and uncertainty for As and beta_s
 j = 0
 start_all = time.time()
@@ -109,26 +119,19 @@ for n in subset_pixels:
     start = time.time()
     paras[j] = log_run(logL, n)
     j += 1
-                     
-#     if n%10 == 0:
-#         end = time.time()
-#         cost = (end - start)/60
-#         print('Time cost is %s mins for pixel %s at rank %s'%(cost, n, rank))
-
+                    
 sendbuf = paras
 
-# print(sendbuf.shape)
 recvbuf = None
 if rank == 0:
     recvbuf = np.ones(size*4*N, dtype='d')
-#     print(recvbuf.shape)
 
 comm.Gather(sendbuf, recvbuf, root=0)
 
 if rank == 0:
     print(total_P[0,0])
     if args.frelist == 'spass_only':
-        np.save('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Dyne_As_betas_masked_both_32_with_SPASS_only_%03d.npy'%(int(args.seed)), recvbuf)
+        np.save('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/nside_128/Dyne_As_betas_SPASS_128_%03d.npy'%(int(args.seed)), recvbuf)
     if args.frelist == 'cbass_only':
         np.save('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Dyne_As_betas_masked_both_32_with_CBASS_only_%03d.npy'%(int(args.seed)), recvbuf)
     if args.frelist == 'both':
