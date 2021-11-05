@@ -27,7 +27,7 @@ args = parser.parse_args()
 a = np.array((0,1,2,3,4))
 
 if args.frelist == 'spass_only':
-    fres_list = [0,2,3,4]; const = 60
+    fres_list = [0, 1, 2, 3]; const = 60
     P_nu0 = np.load('/global/cscratch1/sd/jianyao/CBASS/Foreground/P_beamed_14.92_s0_128_uK_RJ.npy')
 
 if args.frelist == 'cbass_only':
@@ -43,21 +43,23 @@ if rank == 0:
 
 ## configuration 
 
-fres = np.array([2.3, 5, 23, 28, 33]);Nside = 128; 
+fres = np.array([2.3, 23, 28, 33]);Nside = 128; 
 
 ## import data
+total_P = np.load('/global/cscratch1/sd/jianyao/Data/total_P_smoothed_128.npy')
+total_sigma = np.load('/global/cscratch1/sd/jianyao/Data/total_sigma_smoothed_128.npy')
 
-total_P = np.load('/global/cscratch1/sd/jianyao/CBASS/Observations/homo_noise/nside_128/totalP_s0_%s_uK_RJ_%03d.npy'%(Nside, 0))
+mask_index = np.load('/global/cscratch1/sd/jianyao/Data/mask_com_smo_128_index.npy')
+mask_index = np.append(mask_index, np.arange(142)) ## to fill the data so that every rank handles with the equal amount of pixels.
 
-total_sigma = np.load('/global/cscratch1/sd/jianyao/CBASS/Noise/homo_noise/nside_128/5_fre_sigma_P_%s_uK_RJ_smoothed.npy'%Nside)
-masked_index = np.load('/global/cscratch1/sd/jianyao/CBASS/SPASS_masked_index.npy')
-
-### pixels with high s/n ratios. ###
-high_snr = np.load('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/nside_128/High_SNR_pixels_3000.npy')
-mid_snr = np.load('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/nside_128/Middle_SNR_pixels_3000_70000.npy')
-low_snr = np.load('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/nside_128/Low_SNR_pixels_70000_end.npy')
-
+## likelihood analysis
 npara = 2; 
+
+def prior_o(cube):
+    
+    As = cube[0]*400
+    beta = cube[1]*4 - 4
+    return [As, beta]
 
 def prior(cube, a):
     A0 = cube[0]*a 
@@ -85,17 +87,14 @@ def log_run(logL, index):
     
     logL.index = index
     
-    if index in high_snr:
-        sampler = dynesty.NestedSampler(logL.loglike, prior_flex, npara, nlive=400, ptform_args = (P_nu0[logL.index],), bootstrap = 0)
-        
-    elif index in mid_snr:
-        sampler = dynesty.NestedSampler(logL.loglike, prior_mid, npara, nlive=400, ptform_args = (500,),  bootstrap = 0)
-    
-    else:
-        sampler = dynesty.NestedSampler(logL.loglike, prior, npara, nlive=400, ptform_args = (500,),  bootstrap = 0)
+    sampler = dynesty.NestedSampler(logL.loglike, prior_o, npara, nlive=400, bootstrap = 0, sample = 'rslice')
         
     sampler.run_nested(dlogz = 0.1, print_progress=False) #
     results = sampler.results
+    
+    if index%500 == 0:
+        results_reduced = {'samples':results['samples'], 'logwt':results['logwt'], 'logz': results['logz']}
+        np.save('/global/cscratch1/sd/jianyao/Data/Results/chains/pixel_%s.npy'%index, results_reduced)
     
     samples, weights = results.samples, np.exp(results.logwt - results.logz[-1])
     mean, cov = dyfunc.mean_and_cov(samples, weights)
@@ -108,10 +107,10 @@ def log_run(logL, index):
     return np.array((As, sig_A, beta_s, sig_B))
 
 nid = int(args.seed) ## node id used; 0-62
-N = int(args.npix) # 25 pixel for each rank; 61 ranks each node; 63 nodes in total.
+N = int(args.npix) # 16 pixel for each rank; 62 ranks each node; 42 nodes in total.
 
-subset_pixels = masked_index[nid*1525:(nid+1)*1525][np.arange((rank)*N, (rank+1)*N)]    
-    
+subset_pixels = mask_index[nid*992:(nid+1)*992][np.arange((rank)*N, (rank+1)*N)]    
+# print(subset_pixels)
 paras = np.zeros((N, 4)) ## mean value and uncertainty for As and beta_s
 j = 0
 start_all = time.time()
@@ -131,7 +130,7 @@ comm.Gather(sendbuf, recvbuf, root=0)
 if rank == 0:
     print(total_P[0,0])
     if args.frelist == 'spass_only':
-        np.save('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/nside_128/Dyne_As_betas_SPASS_128_%03d.npy'%(int(args.seed)), recvbuf)
+        np.save('/global/cscratch1/sd/jianyao/Data/Results/Dyne_As_betas_SPASS_128_%03d.npy'%(int(args.seed)), recvbuf)
     if args.frelist == 'cbass_only':
         np.save('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Dyne_As_betas_masked_both_32_with_CBASS_only_%03d.npy'%(int(args.seed)), recvbuf)
     if args.frelist == 'both':
