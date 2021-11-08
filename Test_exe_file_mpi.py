@@ -43,7 +43,7 @@ if rank == 0:
 
 ## configuration 
 
-fres = np.array([2.3, 23, 28, 33]);Nside = 128; 
+fres = np.array([2.3, 23, 28.4, 33]);Nside = 128;  ### 28 -> 28.4
 
 ## import data
 total_P = np.load('/global/cscratch1/sd/jianyao/Data/total_P_smoothed_128.npy')
@@ -92,7 +92,7 @@ def log_run(logL, index):
     sampler.run_nested(dlogz = 0.1, print_progress=False) #
     results = sampler.results
     
-    if index%500 == 0:
+    if index%250 == 0:
         results_reduced = {'samples':results['samples'], 'logwt':results['logwt'], 'logz': results['logz']}
         np.save('/global/cscratch1/sd/jianyao/Data/Results/chains/pixel_%s.npy'%index, results_reduced)
     
@@ -116,7 +116,14 @@ j = 0
 start_all = time.time()
 for n in subset_pixels:
     start = time.time()
-    paras[j] = log_run(logL, n)
+    
+    try:
+        paras[j] = log_run(logL, n)
+        
+    except Exception as e: 
+        print(e)
+        print('index is:', n)
+        paras[j] = np.array((1024, 1024, 1024, 1024))
     j += 1
                     
 sendbuf = paras
@@ -128,7 +135,7 @@ if rank == 0:
 comm.Gather(sendbuf, recvbuf, root=0)
 
 if rank == 0:
-    print(total_P[0,0])
+    print(dynesty.__path__)
     if args.frelist == 'spass_only':
         np.save('/global/cscratch1/sd/jianyao/Data/Results/Dyne_As_betas_SPASS_128_%03d.npy'%(int(args.seed)), recvbuf)
     if args.frelist == 'cbass_only':
