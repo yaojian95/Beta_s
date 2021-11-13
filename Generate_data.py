@@ -53,8 +53,9 @@ lfi_data = hp.read_map(lfi, field = None)
 lfi_iqu = np.ones((3, 12*1024**2))
 lfi_iqu[1] = lfi_data[1]*1e6*f_30
 lfi_iqu[2] = lfi_data[2]*1e6*f_30
+sen_lfi = np.sqrt(lfi_data[7])*1e6*f_30; # QQ variance 
 
-sen = [sen_spass, sen_k, sen_ka]; signal = [spass, k_iqu, ka_iqu, lfi_iqu]
+sen = [sen_spass, sen_k, sen_ka, sen_lfi]; signal = [spass, k_iqu, ka_iqu, lfi_iqu]
 
 nside_out = 128; beam_fwhm = [8.9, 52.8, 39.6, 32.34] # spass, wmap_k, wmap_ka, LFI
 nsides = [1024, 512, 512, 1024]; names = ['SPASS','WMAP_K','WMAP_Ka', 'LFI']; 
@@ -68,31 +69,30 @@ for fre in range(0,4):
     ##-------- signal ----------##    
     if rank == 0:
         iqu_smoothed = pysm3.apply_smoothing_and_coord_transform(signal[fre], fwhm= beam_re*u.arcmin)
-        P_smoothed = np.sqrt(iqu_smoothed[1]**2 + iqu_smoothed[2]**2)
-        P_smoothed_128 = hp.ud_grade(P_smoothed, nside_out = nside_out)
+        iqu_smoothed_128 = hp.ud_grade(iqu_smoothed, nside_out = nside_out)        
+        P_smoothed_128 = np.sqrt(iqu_smoothed_128[1]**2 + iqu_smoothed_128[2]**2)  # getting P map from Q and U should always be the last step. 
+
         np.save('/global/cscratch1/sd/jianyao/Data/%s_P_smoothed_5deg_128.npy'%names[fre], P_smoothed_128)
-    
-    if fre==3:
-        break
+
     ##-------- noise ----------##   
     npix = 12*nsides[fre]**2
     
-    noise_P_smoothed = np.zeros((100, 12*nside_out**2))
+    noise_Q_= np.zeros((100, 12*nside_out**2))   ## it's sigma_Q or sigma_U that the likelihood needs, not sigma_P
     
     for i in nset:
-        # noise = np.random.randn(3, npix)
-        # noise[1, :] *= sen[fre]
-        # noise[2, :] *= sen[fre]
+        noise = np.random.randn(3, npix)
+        noise[1, :] *= sen[fre]
+        noise[2, :] *= sen[fre]
 
-        noise = hp.read_map('/global/cscratch1/sd/jianyao/Data/LFI_Noise/noise_030_full_map_mc_%05d.fits'%i, field = None)
-        noise_smoothed = pysm3.apply_smoothing_and_coord_transform(noise*1e6*f_30, fwhm= beam_re*u.arcmin)
+        noise_smoothed = pysm3.apply_smoothing_and_coord_transform(noise, fwhm= beam_re*u.arcmin)
         noise_smoothed_128 = hp.ud_grade(noise_smoothed, nside_out =nside_out)
         
         np.save('/global/cscratch1/sd/jianyao/Data/%s_Noise/Noise_%s_uK_RJ_%03d.npy'%(names[fre],nside_out, i), noise_smoothed_128)
         
-        noise_P_smoothed[i] = np.sqrt(noise_smoothed_128[1]**2 + noise_smoothed_128[2]**2)
+        noise_Q[i] = noise_smoothed_128[1]
+        # noise_P_smoothed[i] = np.sqrt(noise_smoothed_128[1]**2 + noise_smoothed_128[2]**2)
 
-    noise_sigmaP_smoothed = np.std(noise_P_smoothed, axis = 0)
-    np.save('/global/cscratch1/sd/jianyao/Data/%s_Noise/sigma_P_%s_smoothed.npy'%(names[fre],nside_out), noise_sigmaP_smoothed)
+    noise_sigmaQ_smoothed = np.std(noise_Q, axis = 0)
+    np.save('/global/cscratch1/sd/jianyao/Data/%s_Noise/sigma_P_%s_smoothed.npy'%(names[fre],nside_out), noise_sigmaQ_smoothed)
 
 print('Done!')
