@@ -106,12 +106,12 @@ def log_run(logL, index):
     
     return np.array((As, sig_A, beta_s, sig_B))
 
-nid = int(args.seed) ## node id used; 0-62
+nid = int(args.seed) ## node id used; 0-42
 N = int(args.npix) # 16 pixel for each rank; 62 ranks each node; 42 nodes in total.
 
-subset_pixels = mask_index[nid*992:(nid+1)*992][np.arange((rank)*N, (rank+1)*N)]    
+subset_pixels = mask_index[nid*1984:(nid+1)*1984][np.arange((rank)*N, (rank+1)*N)]    
 # print(subset_pixels)
-paras = np.zeros((N, 4)) ## mean value and uncertainty for As and beta_s
+paras = np.zeros((N, 4),dtype='d') ## mean value and uncertainty for As and beta_s
 j = 0
 start_all = time.time()
 for n in subset_pixels:
@@ -119,11 +119,17 @@ for n in subset_pixels:
     
     try:
         paras[j] = log_run(logL, n)
+    
+    except:
         
-    except Exception as e: 
-        print(e)
-        print('index is:', n)
-        paras[j] = np.array((1024, 1024, 1024, 1024))
+        try:
+            print('First error:', n)
+            paras[j] = log_run(logL, n)
+            
+        except Exception as e: 
+            print(e)
+            print('Second error:', n)
+            paras[j] = np.array((1024, 1024, 1024, 1024))
     j += 1
                     
 sendbuf = paras
