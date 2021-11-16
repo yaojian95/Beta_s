@@ -50,7 +50,7 @@ total_P = np.load('/global/cscratch1/sd/jianyao/Data/total_P_smoothed_128.npy')
 total_sigma = np.load('/global/cscratch1/sd/jianyao/Data/total_sigma_smoothed_128.npy')
 
 mask_index = np.load('/global/cscratch1/sd/jianyao/Data/mask_com_smo_128_index.npy')
-mask_index = np.append(mask_index, np.arange(142)) ## to fill the data so that every rank handles with the equal amount of pixels.
+mask_index = np.append(mask_index, np.ones(142)*14220) ## to fill the data so that every rank handles with the equal amount of pixels.
 
 ## likelihood analysis
 npara = 2; 
@@ -109,7 +109,7 @@ def log_run(logL, index):
 nid = int(args.seed) ## node id used; 0-42
 N = int(args.npix) # 16 pixel for each rank; 62 ranks each node; 42 nodes in total.
 
-subset_pixels = mask_index[nid*1984:(nid+1)*1984][np.arange((rank)*N, (rank+1)*N)]    
+subset_pixels = mask_index[nid*992:(nid+1)*992][np.arange((rank)*N, (rank+1)*N)]    
 # print(subset_pixels)
 paras = np.zeros((N, 4),dtype='d') ## mean value and uncertainty for As and beta_s
 j = 0
@@ -124,6 +124,7 @@ for n in subset_pixels:
         
         try:
             print('First error:', n)
+            logL.sigma *= 10
             paras[j] = log_run(logL, n)
             
         except Exception as e: 
@@ -143,7 +144,7 @@ comm.Gather(sendbuf, recvbuf, root=0)
 if rank == 0:
     print(dynesty.__path__)
     if args.frelist == 'spass_only':
-        np.save('/global/cscratch1/sd/jianyao/Data/Results/Dyne_As_betas_SPASS_128_%03d.npy'%(int(args.seed)), recvbuf)
+        np.save('/global/cscratch1/sd/jianyao/Data/Results/v2_Dyne_As_betas_SPASS_128_%03d.npy'%(int(args.seed)), recvbuf)
     if args.frelist == 'cbass_only':
         np.save('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Dyne_As_betas_masked_both_32_with_CBASS_only_%03d.npy'%(int(args.seed)), recvbuf)
     if args.frelist == 'both':
