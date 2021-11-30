@@ -53,7 +53,7 @@ lfi_data = hp.read_map(lfi, field = None)
 lfi_iqu = np.ones((3, 12*1024**2))
 lfi_iqu[1] = lfi_data[1]*1e6*f_30
 lfi_iqu[2] = lfi_data[2]*1e6*f_30
-sen_lfi = np.sqrt(lfi_data[7])*1e6*f_30; # QQ variance 
+sen_lfi = np.sqrt(lfi_data[7])*1e6*f_30; # QQ variance, assuming sigmaQ = sigmaU
 
 sen = [sen_spass, sen_k, sen_ka, sen_lfi]; signal = [spass, k_iqu, ka_iqu, lfi_iqu]
 
@@ -77,7 +77,7 @@ for fre in range(0,4):
     ##-------- noise ----------##   
     npix = 12*nsides[fre]**2
     
-    noise_Q_= np.zeros((100, 12*nside_out**2))   ## it's sigma_Q or sigma_U that the likelihood needs, not sigma_P
+    noise_Q = np.zeros((100, 12*nside_out**2))   ## it's sigma_Q or sigma_U that the likelihood needs, not sigma_P
     
     for i in nset:
         noise = np.random.randn(3, npix)
@@ -89,10 +89,10 @@ for fre in range(0,4):
         
         np.save('/global/cscratch1/sd/jianyao/Data/%s_Noise/Noise_%s_uK_RJ_%03d.npy'%(names[fre],nside_out, i), noise_smoothed_128)
         
-        noise_Q[i] = noise_smoothed_128[1]
-        # noise_P_smoothed[i] = np.sqrt(noise_smoothed_128[1]**2 + noise_smoothed_128[2]**2)
+#         noise_Q[i] = noise_smoothed_128[1]
+#         # noise_P_smoothed[i] = np.sqrt(noise_smoothed_128[1]**2 + noise_smoothed_128[2]**2)
 
-    noise_sigmaQ_smoothed = np.std(noise_Q, axis = 0)
-    np.save('/global/cscratch1/sd/jianyao/Data/%s_Noise/sigma_P_%s_smoothed.npy'%(names[fre],nside_out), noise_sigmaQ_smoothed)
+#     noise_sigmaQ_smoothed = np.std(noise_Q, axis = 0)
+#     np.save('/global/cscratch1/sd/jianyao/Data/%s_Noise/sigma_Q_%s_smoothed.npy'%(names[fre],nside_out), noise_sigmaQ_smoothed)
 
 print('Done!')

@@ -47,10 +47,10 @@ fres = np.array([2.3, 23, 28.4, 33]);Nside = 128;  ### 28 -> 28.4
 
 ## import data
 total_P = np.load('/global/cscratch1/sd/jianyao/Data/total_P_smoothed_128.npy')
-total_sigma = np.load('/global/cscratch1/sd/jianyao/Data/total_sigma_smoothed_128.npy')
+total_sigma = np.load('/global/cscratch1/sd/jianyao/Data/total_sigma_smoothed_128_v2.npy')
 
 mask_index = np.load('/global/cscratch1/sd/jianyao/Data/mask_com_smo_128_index.npy')
-mask_index = np.append(mask_index, np.ones(142)*14220) ## to fill the data so that every rank handles with the equal amount of pixels.
+mask_index = np.append(mask_index, np.ones(142, dtype = np.int64)*14220) ## to fill the data so that every rank handles with the equal amount of pixels.
 
 ## likelihood analysis
 npara = 2; 
@@ -144,7 +144,7 @@ comm.Gather(sendbuf, recvbuf, root=0)
 if rank == 0:
     print(dynesty.__path__)
     if args.frelist == 'spass_only':
-        np.save('/global/cscratch1/sd/jianyao/Data/Results/v2_Dyne_As_betas_SPASS_128_%03d.npy'%(int(args.seed)), recvbuf)
+        np.save('/global/cscratch1/sd/jianyao/Data/Results/v3_Dyne_As_betas_SPASS_128_%03d.npy'%(int(args.seed)), recvbuf)
     if args.frelist == 'cbass_only':
         np.save('/global/cscratch1/sd/jianyao/CBASS/Results/s0_only_homo_noise/Dyne_As_betas_masked_both_32_with_CBASS_only_%03d.npy'%(int(args.seed)), recvbuf)
     if args.frelist == 'both':
